@@ -31,9 +31,27 @@ interface ExportData {
 // ============================================
 
 const CURRENCY_SYMBOLS: Record<Currency, string> = {
-    TRY: '₺',
+    TRY: 'TL',
     USD: '$',
-    EUR: '€',
+    EUR: 'EUR',
+};
+
+// ============================================
+// TURKISH CHARACTER CONVERSION
+// ============================================
+
+const turkishToAscii = (text: string): string => {
+    const charMap: Record<string, string> = {
+        'ğ': 'g', 'Ğ': 'G',
+        'ü': 'u', 'Ü': 'U',
+        'ş': 's', 'Ş': 'S',
+        'ı': 'i', 'İ': 'I',
+        'ö': 'o', 'Ö': 'O',
+        'ç': 'c', 'Ç': 'C',
+        '₺': 'TL',
+    };
+
+    return text.replace(/[ğĞüÜşŞıİöÖçÇ₺]/g, (char) => charMap[char] || char);
 };
 
 // ============================================
@@ -41,10 +59,11 @@ const CURRENCY_SYMBOLS: Record<Currency, string> = {
 // ============================================
 
 const formatAmount = (amount: number, currency: Currency): string => {
-    return `${CURRENCY_SYMBOLS[currency]}${amount.toLocaleString('tr-TR', {
+    const formatted = amount.toLocaleString('tr-TR', {
         minimumFractionDigits: 2,
         maximumFractionDigits: 2,
-    })}`;
+    });
+    return `${formatted} ${CURRENCY_SYMBOLS[currency]}`;
 };
 
 const formatDate = (dateStr: string): string => {
@@ -56,8 +75,15 @@ const formatDate = (dateStr: string): string => {
     });
 };
 
+const formatDateLong = (dateStr: string): string => {
+    const date = new Date(dateStr);
+    const months = ['Ocak', 'Subat', 'Mart', 'Nisan', 'Mayis', 'Haziran',
+        'Temmuz', 'Agustos', 'Eylul', 'Ekim', 'Kasim', 'Aralik'];
+    return `${date.getDate()} ${months[date.getMonth()]} ${date.getFullYear()}`;
+};
+
 // ============================================
-// PDF EXPORT
+// PDF EXPORT - PROFESSIONAL DESIGN
 // ============================================
 
 export const generatePDF = (data: ExportData): void => {
@@ -66,133 +92,230 @@ export const generatePDF = (data: ExportData): void => {
     // Create PDF document
     const doc = new jsPDF();
     const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
 
-    // Colors
-    const primaryColor: [number, number, number] = [74, 144, 164];
-    const incomeColor: [number, number, number] = [74, 222, 128];
-    const expenseColor: [number, number, number] = [248, 113, 113];
-    const textColor: [number, number, number] = [50, 50, 50];
+    // Color Palette - Professional Dark Theme
+    const colors = {
+        primary: [74, 144, 164] as [number, number, number],
+        secondary: [139, 92, 246] as [number, number, number],
+        income: [34, 197, 94] as [number, number, number],
+        expense: [239, 68, 68] as [number, number, number],
+        dark: [26, 26, 26] as [number, number, number],
+        text: [50, 50, 50] as [number, number, number],
+        lightGray: [245, 245, 245] as [number, number, number],
+        mediumGray: [200, 200, 200] as [number, number, number],
+    };
 
-    let yPos = 20;
+    let yPos = 0;
 
-    // ===== HEADER =====
-    doc.setFillColor(...primaryColor);
-    doc.rect(0, 0, pageWidth, 35, 'F');
+    // ===== HEADER SECTION =====
+    // Gradient Header Background
+    doc.setFillColor(...colors.dark);
+    doc.rect(0, 0, pageWidth, 50, 'F');
 
+    // Accent Line
+    doc.setFillColor(...colors.primary);
+    doc.rect(0, 50, pageWidth, 3, 'F');
+
+    // Company Name
     doc.setTextColor(255, 255, 255);
-    doc.setFontSize(20);
-    doc.text('MEF On Muhasebe', 14, 15);
+    doc.setFontSize(24);
+    doc.setFont('helvetica', 'bold');
+    doc.text('MEF ON MUHASEBE', 14, 22);
 
+    // Subtitle
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'normal');
+    doc.text('Finansal Rapor', 14, 32);
+
+    // Profile Badge
+    doc.setFillColor(255, 255, 255, 0.1);
+    doc.roundedRect(14, 38, 60, 8, 2, 2, 'F');
+    doc.setFontSize(9);
+    doc.text(turkishToAscii(profileName), 18, 44);
+
+    // Period & Date (Right Side)
     doc.setFontSize(12);
-    doc.text(`Finansal Rapor - ${profileName}`, 14, 25);
+    doc.setFont('helvetica', 'bold');
+    doc.text(turkishToAscii(periodLabel), pageWidth - 14, 22, { align: 'right' });
 
-    doc.setFontSize(10);
-    doc.text(periodLabel, pageWidth - 14, 15, { align: 'right' });
-    doc.text(`Olusturma: ${formatDate(new Date().toISOString())}`, pageWidth - 14, 22, { align: 'right' });
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(180, 180, 180);
+    doc.text(`Olusturma: ${formatDateLong(new Date().toISOString())}`, pageWidth - 14, 32, { align: 'right' });
 
-    yPos = 50;
+    yPos = 65;
 
-    // ===== SUMMARY CARDS =====
-    doc.setTextColor(...textColor);
+    // ===== SUMMARY SECTION =====
+    doc.setTextColor(...colors.text);
     doc.setFontSize(14);
-    doc.text('Finansal Ozet', 14, yPos);
+    doc.setFont('helvetica', 'bold');
+    doc.text('FINANSAL OZET', 14, yPos);
+
     yPos += 10;
 
-    // Summary boxes
-    const boxWidth = (pageWidth - 42) / 3;
-    const boxHeight = 25;
+    // Summary Cards
+    const cardWidth = (pageWidth - 42) / 3;
+    const cardHeight = 35;
+    const cardY = yPos;
 
-    // Income box
-    doc.setFillColor(240, 253, 244);
-    doc.roundedRect(14, yPos, boxWidth, boxHeight, 3, 3, 'F');
-    doc.setTextColor(...incomeColor);
-    doc.setFontSize(10);
-    doc.text('Toplam Gelir', 14 + boxWidth / 2, yPos + 8, { align: 'center' });
+    // Income Card
+    doc.setFillColor(240, 253, 244); // Light green
+    doc.roundedRect(14, cardY, cardWidth, cardHeight, 4, 4, 'F');
+    doc.setDrawColor(...colors.income);
+    doc.setLineWidth(0.5);
+    doc.roundedRect(14, cardY, cardWidth, cardHeight, 4, 4, 'S');
+
+    doc.setFontSize(9);
+    doc.setTextColor(100, 100, 100);
+    doc.setFont('helvetica', 'normal');
+    doc.text('TOPLAM GELIR', 14 + cardWidth / 2, cardY + 12, { align: 'center' });
+
     doc.setFontSize(14);
-    doc.text(formatAmount(totalIncome, currency), 14 + boxWidth / 2, yPos + 18, { align: 'center' });
+    doc.setTextColor(...colors.income);
+    doc.setFont('helvetica', 'bold');
+    doc.text(formatAmount(totalIncome, currency), 14 + cardWidth / 2, cardY + 25, { align: 'center' });
 
-    // Expense box
-    doc.setFillColor(254, 242, 242);
-    doc.roundedRect(14 + boxWidth + 7, yPos, boxWidth, boxHeight, 3, 3, 'F');
-    doc.setTextColor(...expenseColor);
-    doc.setFontSize(10);
-    doc.text('Toplam Gider', 14 + boxWidth + 7 + boxWidth / 2, yPos + 8, { align: 'center' });
+    // Expense Card
+    const expenseCardX = 14 + cardWidth + 7;
+    doc.setFillColor(254, 242, 242); // Light red
+    doc.roundedRect(expenseCardX, cardY, cardWidth, cardHeight, 4, 4, 'F');
+    doc.setDrawColor(...colors.expense);
+    doc.roundedRect(expenseCardX, cardY, cardWidth, cardHeight, 4, 4, 'S');
+
+    doc.setFontSize(9);
+    doc.setTextColor(100, 100, 100);
+    doc.setFont('helvetica', 'normal');
+    doc.text('TOPLAM GIDER', expenseCardX + cardWidth / 2, cardY + 12, { align: 'center' });
+
     doc.setFontSize(14);
-    doc.text(formatAmount(totalExpense, currency), 14 + boxWidth + 7 + boxWidth / 2, yPos + 18, { align: 'center' });
+    doc.setTextColor(...colors.expense);
+    doc.setFont('helvetica', 'bold');
+    doc.text(formatAmount(totalExpense, currency), expenseCardX + cardWidth / 2, cardY + 25, { align: 'center' });
 
-    // Balance box
-    const balanceColor = balance >= 0 ? incomeColor : expenseColor;
-    doc.setFillColor(245, 245, 245);
-    doc.roundedRect(14 + (boxWidth + 7) * 2, yPos, boxWidth, boxHeight, 3, 3, 'F');
+    // Balance Card
+    const balanceCardX = 14 + (cardWidth + 7) * 2;
+    const balanceColor = balance >= 0 ? colors.income : colors.expense;
+    doc.setFillColor(245, 245, 250); // Light purple
+    doc.roundedRect(balanceCardX, cardY, cardWidth, cardHeight, 4, 4, 'F');
+    doc.setDrawColor(...colors.secondary);
+    doc.roundedRect(balanceCardX, cardY, cardWidth, cardHeight, 4, 4, 'S');
+
+    doc.setFontSize(9);
+    doc.setTextColor(100, 100, 100);
+    doc.setFont('helvetica', 'normal');
+    doc.text('NET BAKIYE', balanceCardX + cardWidth / 2, cardY + 12, { align: 'center' });
+
+    doc.setFontSize(14);
     doc.setTextColor(...balanceColor);
-    doc.setFontSize(10);
-    doc.text('Net Bakiye', 14 + (boxWidth + 7) * 2 + boxWidth / 2, yPos + 8, { align: 'center' });
-    doc.setFontSize(14);
-    doc.text(formatAmount(balance, currency), 14 + (boxWidth + 7) * 2 + boxWidth / 2, yPos + 18, { align: 'center' });
+    doc.setFont('helvetica', 'bold');
+    const balanceText = (balance >= 0 ? '+' : '') + formatAmount(balance, currency);
+    doc.text(balanceText, balanceCardX + cardWidth / 2, cardY + 25, { align: 'center' });
 
-    yPos += boxHeight + 15;
+    yPos = cardY + cardHeight + 20;
 
     // ===== TRANSACTIONS TABLE =====
-    doc.setTextColor(...textColor);
+    doc.setTextColor(...colors.text);
     doc.setFontSize(14);
-    doc.text('Islem Listesi', 14, yPos);
-    yPos += 5;
+    doc.setFont('helvetica', 'bold');
+    doc.text('ISLEM LISTESI', 14, yPos);
+
+    // Transaction count badge
+    doc.setFillColor(...colors.primary);
+    doc.roundedRect(75, yPos - 5, 25, 8, 2, 2, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'bold');
+    doc.text(`${transactions.length} adet`, 87.5, yPos, { align: 'center' });
+
+    yPos += 8;
 
     // Prepare table data
-    const tableData = transactions.map((t) => {
+    const tableData = transactions.map((t, index) => {
         const categoryConfig = CATEGORY_CONFIG[t.category as TransactionCategory];
+        const typeLabel = t.type === 'income' ? 'Gelir' : 'Gider';
+        const amountPrefix = t.type === 'income' ? '+' : '-';
+
         return [
+            (index + 1).toString(),
             formatDate(t.date),
-            t.type === 'income' ? 'Gelir' : 'Gider',
-            categoryConfig?.label || t.category,
-            t.title,
-            formatAmount(t.amount, currency),
+            typeLabel,
+            turkishToAscii(categoryConfig?.label || t.category),
+            turkishToAscii(t.title),
+            `${amountPrefix}${formatAmount(t.amount, currency)}`,
         ];
     });
 
     autoTable(doc, {
         startY: yPos,
-        head: [['Tarih', 'Tur', 'Kategori', 'Baslik', 'Tutar']],
+        head: [['#', 'Tarih', 'Tur', 'Kategori', 'Baslik', 'Tutar']],
         body: tableData,
-        theme: 'striped',
+        theme: 'plain',
         headStyles: {
-            fillColor: primaryColor,
+            fillColor: colors.dark,
             textColor: [255, 255, 255],
-            fontSize: 10,
+            fontSize: 9,
+            fontStyle: 'bold',
+            cellPadding: 4,
         },
         bodyStyles: {
             fontSize: 9,
-            textColor: textColor,
+            textColor: colors.text,
+            cellPadding: 3,
         },
         alternateRowStyles: {
             fillColor: [250, 250, 250],
         },
         columnStyles: {
-            0: { cellWidth: 25 },
-            1: { cellWidth: 20 },
-            2: { cellWidth: 30 },
-            3: { cellWidth: 'auto' },
-            4: { cellWidth: 35, halign: 'right' },
+            0: { cellWidth: 10, halign: 'center' },
+            1: { cellWidth: 25 },
+            2: { cellWidth: 18 },
+            3: { cellWidth: 30 },
+            4: { cellWidth: 'auto' },
+            5: { cellWidth: 35, halign: 'right', fontStyle: 'bold' },
         },
         margin: { left: 14, right: 14 },
+        didParseCell: (data) => {
+            // Color amount cells based on type
+            if (data.column.index === 5 && data.section === 'body') {
+                const cellText = data.cell.raw as string;
+                if (cellText.startsWith('+')) {
+                    data.cell.styles.textColor = colors.income;
+                } else if (cellText.startsWith('-')) {
+                    data.cell.styles.textColor = colors.expense;
+                }
+            }
+            // Color type column
+            if (data.column.index === 2 && data.section === 'body') {
+                const cellText = data.cell.raw as string;
+                if (cellText === 'Gelir') {
+                    data.cell.styles.textColor = colors.income;
+                } else {
+                    data.cell.styles.textColor = colors.expense;
+                }
+            }
+        },
     });
 
-    // Get final Y position after table
+    // Get final Y after table
     const finalY = (doc as any).lastAutoTable.finalY || yPos + 50;
 
     // ===== CATEGORY SUMMARY =====
-    const newYPos = finalY + 15;
+    if (finalY < pageHeight - 80) {
+        let catY = finalY + 15;
 
-    if (newYPos < doc.internal.pageSize.getHeight() - 60) {
-        doc.setTextColor(...textColor);
+        doc.setTextColor(...colors.text);
         doc.setFontSize(14);
-        doc.text('Kategori Ozeti', 14, newYPos);
+        doc.setFont('helvetica', 'bold');
+        doc.text('KATEGORI OZETI', 14, catY);
+
+        catY += 8;
 
         // Group by category
         const categoryTotals: Record<string, { income: number; expense: number }> = {};
 
         transactions.forEach((t) => {
-            const cat = CATEGORY_CONFIG[t.category as TransactionCategory]?.label || t.category;
+            const cat = turkishToAscii(CATEGORY_CONFIG[t.category as TransactionCategory]?.label || t.category);
             if (!categoryTotals[cat]) {
                 categoryTotals[cat] = { income: 0, expense: 0 };
             }
@@ -205,31 +328,49 @@ export const generatePDF = (data: ExportData): void => {
 
         const categoryData = Object.entries(categoryTotals).map(([cat, totals]) => [
             cat,
-            totals.income > 0 ? formatAmount(totals.income, currency) : '-',
-            totals.expense > 0 ? formatAmount(totals.expense, currency) : '-',
+            totals.income > 0 ? `+${formatAmount(totals.income, currency)}` : '-',
+            totals.expense > 0 ? `-${formatAmount(totals.expense, currency)}` : '-',
             formatAmount(totals.income - totals.expense, currency),
         ]);
 
         autoTable(doc, {
-            startY: newYPos + 5,
+            startY: catY,
             head: [['Kategori', 'Gelir', 'Gider', 'Net']],
             body: categoryData,
-            theme: 'grid',
+            theme: 'plain',
             headStyles: {
-                fillColor: [100, 100, 100],
+                fillColor: colors.secondary,
                 textColor: [255, 255, 255],
                 fontSize: 9,
+                fontStyle: 'bold',
+                cellPadding: 4,
             },
             bodyStyles: {
-                fontSize: 8,
+                fontSize: 9,
+                cellPadding: 3,
             },
             columnStyles: {
                 0: { cellWidth: 50 },
                 1: { cellWidth: 40, halign: 'right' },
                 2: { cellWidth: 40, halign: 'right' },
-                3: { cellWidth: 40, halign: 'right' },
+                3: { cellWidth: 40, halign: 'right', fontStyle: 'bold' },
             },
             margin: { left: 14, right: 14 },
+            didParseCell: (data) => {
+                if (data.section === 'body') {
+                    const cellText = data.cell.raw as string;
+                    if (data.column.index === 1 && cellText.startsWith('+')) {
+                        data.cell.styles.textColor = colors.income;
+                    }
+                    if (data.column.index === 2 && cellText.startsWith('-')) {
+                        data.cell.styles.textColor = colors.expense;
+                    }
+                    if (data.column.index === 3) {
+                        const value = parseFloat(cellText.replace(/[^\d.-]/g, ''));
+                        data.cell.styles.textColor = value >= 0 ? colors.income : colors.expense;
+                    }
+                }
+            },
         });
     }
 
@@ -237,18 +378,31 @@ export const generatePDF = (data: ExportData): void => {
     const pageCount = doc.getNumberOfPages();
     for (let i = 1; i <= pageCount; i++) {
         doc.setPage(i);
+
+        // Footer line
+        doc.setDrawColor(...colors.mediumGray);
+        doc.setLineWidth(0.3);
+        doc.line(14, pageHeight - 15, pageWidth - 14, pageHeight - 15);
+
+        // Footer text
         doc.setFontSize(8);
         doc.setTextColor(150, 150, 150);
+        doc.setFont('helvetica', 'normal');
         doc.text(
-            `Sayfa ${i} / ${pageCount} - MEF On Muhasebe`,
-            pageWidth / 2,
-            doc.internal.pageSize.getHeight() - 10,
-            { align: 'center' }
+            `MEF On Muhasebe - Finansal Rapor`,
+            14,
+            pageHeight - 8
+        );
+        doc.text(
+            `Sayfa ${i} / ${pageCount}`,
+            pageWidth - 14,
+            pageHeight - 8,
+            { align: 'right' }
         );
     }
 
     // Save file
-    const fileName = `MEF_Rapor_${profileName}_${periodLabel.replace(/\s/g, '_')}.pdf`;
+    const fileName = `MEF_Rapor_${turkishToAscii(profileName)}_${turkishToAscii(periodLabel).replace(/\s/g, '_')}.pdf`;
     doc.save(fileName);
 };
 
@@ -264,32 +418,29 @@ export const generateExcel = (data: ExportData): void => {
 
     // ===== SHEET 1: Summary =====
     const summaryData = [
-        ['MEF On Muhasebe - Finansal Rapor'],
+        ['MEF Ön Muhasebe - Finansal Rapor'],
         [''],
         ['Profil:', profileName],
-        ['Donem:', periodLabel],
-        ['Olusturma Tarihi:', formatDate(new Date().toISOString())],
+        ['Dönem:', periodLabel],
+        ['Oluşturma Tarihi:', formatDate(new Date().toISOString())],
         [''],
-        ['FINANSAL OZET'],
+        ['FİNANSAL ÖZET'],
         [''],
         ['Toplam Gelir:', formatAmount(totalIncome, currency)],
         ['Toplam Gider:', formatAmount(totalExpense, currency)],
         ['Net Bakiye:', formatAmount(balance, currency)],
         [''],
-        ['Islem Sayisi:', transactions.length],
-        ['Gelir Islem Sayisi:', transactions.filter(t => t.type === 'income').length],
-        ['Gider Islem Sayisi:', transactions.filter(t => t.type === 'expense').length],
+        ['İşlem Sayısı:', transactions.length],
+        ['Gelir İşlem Sayısı:', transactions.filter(t => t.type === 'income').length],
+        ['Gider İşlem Sayısı:', transactions.filter(t => t.type === 'expense').length],
     ];
 
     const summaryWs = XLSX.utils.aoa_to_sheet(summaryData);
-
-    // Set column widths
     summaryWs['!cols'] = [{ wch: 20 }, { wch: 30 }];
-
-    XLSX.utils.book_append_sheet(wb, summaryWs, 'Ozet');
+    XLSX.utils.book_append_sheet(wb, summaryWs, 'Özet');
 
     // ===== SHEET 2: All Transactions =====
-    const transactionHeaders = ['Tarih', 'Tur', 'Kategori', 'Baslik', 'Aciklama', 'Tutar', 'Tekrarlayan'];
+    const transactionHeaders = ['Tarih', 'Tür', 'Kategori', 'Başlık', 'Açıklama', 'Tutar', 'Tekrarlayan'];
 
     const transactionRows = transactions.map((t) => {
         const categoryConfig = CATEGORY_CONFIG[t.category as TransactionCategory];
@@ -300,25 +451,16 @@ export const generateExcel = (data: ExportData): void => {
             t.title,
             t.description || '',
             t.amount,
-            t.isRecurring ? 'Evet' : 'Hayir',
+            t.isRecurring ? 'Evet' : 'Hayır',
         ];
     });
 
     const transactionData = [transactionHeaders, ...transactionRows];
     const transactionsWs = XLSX.utils.aoa_to_sheet(transactionData);
-
-    // Set column widths
     transactionsWs['!cols'] = [
-        { wch: 12 },
-        { wch: 10 },
-        { wch: 15 },
-        { wch: 30 },
-        { wch: 40 },
-        { wch: 15 },
-        { wch: 12 },
+        { wch: 12 }, { wch: 10 }, { wch: 15 }, { wch: 30 }, { wch: 40 }, { wch: 15 }, { wch: 12 },
     ];
-
-    XLSX.utils.book_append_sheet(wb, transactionsWs, 'Islemler');
+    XLSX.utils.book_append_sheet(wb, transactionsWs, 'İşlemler');
 
     // ===== SHEET 3: Category Summary =====
     const categoryTotals: Record<string, { income: number; expense: number; count: number }> = {};
@@ -336,43 +478,21 @@ export const generateExcel = (data: ExportData): void => {
         }
     });
 
-    const categoryHeaders = ['Kategori', 'Islem Sayisi', 'Gelir', 'Gider', 'Net'];
+    const categoryHeaders = ['Kategori', 'İşlem Sayısı', 'Gelir', 'Gider', 'Net'];
     const categoryRows = Object.entries(categoryTotals).map(([cat, totals]) => [
-        cat,
-        totals.count,
-        totals.income,
-        totals.expense,
-        totals.income - totals.expense,
+        cat, totals.count, totals.income, totals.expense, totals.income - totals.expense,
     ]);
-
-    // Add totals row
-    categoryRows.push([
-        'TOPLAM',
-        transactions.length,
-        totalIncome,
-        totalExpense,
-        balance,
-    ]);
+    categoryRows.push(['TOPLAM', transactions.length, totalIncome, totalExpense, balance]);
 
     const categoryData = [categoryHeaders, ...categoryRows];
     const categoryWs = XLSX.utils.aoa_to_sheet(categoryData);
-
-    // Set column widths
-    categoryWs['!cols'] = [
-        { wch: 20 },
-        { wch: 15 },
-        { wch: 15 },
-        { wch: 15 },
-        { wch: 15 },
-    ];
-
-    XLSX.utils.book_append_sheet(wb, categoryWs, 'Kategori Ozeti');
+    categoryWs['!cols'] = [{ wch: 20 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 15 }];
+    XLSX.utils.book_append_sheet(wb, categoryWs, 'Kategori Özeti');
 
     // Generate Excel file
     const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
     const blob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
 
-    // Save file
     const fileName = `MEF_Rapor_${profileName}_${periodLabel.replace(/\s/g, '_')}.xlsx`;
     saveAs(blob, fileName);
 };
@@ -424,13 +544,11 @@ export const calculatePeriodData = (
             break;
     }
 
-    // Filter transactions by period
     const filteredTransactions = transactions.filter((t) => {
         const date = new Date(t.date);
         return date >= startDate && date <= endDate;
     });
 
-    // Calculate totals
     const totalIncome = filteredTransactions
         .filter((t) => t.type === 'income')
         .reduce((sum, t) => sum + t.amount, 0);
