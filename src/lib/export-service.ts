@@ -83,6 +83,155 @@ const formatDateLong = (dateStr: string): string => {
 };
 
 // ============================================
+// PIE CHART DRAWING HELPER
+// ============================================
+
+interface PieSlice {
+    label: string;
+    value: number;
+    color: [number, number, number];
+}
+
+const drawPieChart = (
+    doc: jsPDF,
+    slices: PieSlice[],
+    centerX: number,
+    centerY: number,
+    radius: number,
+    title: string
+): number => {
+    const total = slices.reduce((sum, s) => sum + s.value, 0);
+    if (total === 0) return centerY;
+
+    // Title
+    doc.setFontSize(11);
+    doc.setTextColor(50, 50, 50);
+    doc.setFont('helvetica', 'bold');
+    doc.text(title, centerX, centerY - radius - 8, { align: 'center' });
+
+    // Draw pie slices
+    let currentAngle = -Math.PI / 2; // Start from top
+
+    slices.forEach((slice) => {
+        if (slice.value === 0) return;
+
+        const sliceAngle = (slice.value / total) * 2 * Math.PI;
+        const endAngle = currentAngle + sliceAngle;
+
+        // Draw slice using lines (approximation)
+        doc.setFillColor(...slice.color);
+        doc.setDrawColor(255, 255, 255);
+        doc.setLineWidth(1);
+
+        // Create path for slice
+        const steps = 50;
+        const points: [number, number][] = [[centerX, centerY]];
+
+        for (let i = 0; i <= steps; i++) {
+            const angle = currentAngle + (sliceAngle * i) / steps;
+            const x = centerX + radius * Math.cos(angle);
+            const y = centerY + radius * Math.sin(angle);
+            points.push([x, y]);
+        }
+        points.push([centerX, centerY]);
+
+        // Draw filled polygon
+        doc.setFillColor(...slice.color);
+        // @ts-ignore - jsPDF polygon method
+        const polygonPath = points.map((p, i) => (i === 0 ? 'M' : 'L') + p[0] + ' ' + p[1]).join(' ') + ' Z';
+
+        // Use triangle fan approach for better compatibility
+        for (let i = 1; i < points.length - 1; i++) {
+            doc.triangle(
+                points[0][0], points[0][1],
+                points[i][0], points[i][1],
+                points[i + 1][0], points[i + 1][1],
+                'F'
+            );
+        }
+
+        // Draw percentage label in the middle of slice
+        const midAngle = currentAngle + sliceAngle / 2;
+        const labelRadius = radius * 0.65;
+        const labelX = centerX + labelRadius * Math.cos(midAngle);
+        const labelY = centerY + labelRadius * Math.sin(midAngle);
+
+        const percentage = ((slice.value / total) * 100).toFixed(1);
+        if (parseFloat(percentage) >= 5) { // Only show if >= 5%
+            doc.setFontSize(8);
+            doc.setTextColor(255, 255, 255);
+            doc.setFont('helvetica', 'bold');
+            doc.text(`${percentage}%`, labelX, labelY, { align: 'center' });
+        }
+
+        currentAngle = endAngle;
+    });
+
+    // Draw center circle (donut effect)
+    doc.setFillColor(255, 255, 255);
+    doc.circle(centerX, centerY, radius * 0.4, 'F');
+
+    // Center text
+    doc.setFontSize(10);
+    doc.setTextColor(50, 50, 50);
+    doc.setFont('helvetica', 'bold');
+    doc.text('TOPLAM', centerX, centerY - 3, { align: 'center' });
+
+    // Return bottom Y for legend placement
+    return centerY + radius + 5;
+};
+
+const drawLegend = (
+    doc: jsPDF,
+    slices: PieSlice[],
+    startX: number,
+    startY: number,
+    currency: Currency
+): void => {
+    const total = slices.reduce((sum, s) => sum + s.value, 0);
+    let y = startY;
+
+    slices.forEach((slice) => {
+        if (slice.value === 0) return;
+
+        // Color box
+        doc.setFillColor(...slice.color);
+        doc.roundedRect(startX, y - 3, 8, 8, 1, 1, 'F');
+
+        // Label
+        doc.setFontSize(8);
+        doc.setTextColor(50, 50, 50);
+        doc.setFont('helvetica', 'normal');
+        doc.text(slice.label, startX + 12, y + 2);
+
+        // Amount and percentage
+        const percentage = ((slice.value / total) * 100).toFixed(1);
+        doc.setFont('helvetica', 'bold');
+        doc.text(
+            `${formatAmount(slice.value, currency)} (${percentage}%)`,
+            startX + 12,
+            y + 9
+        );
+
+        y += 18;
+    });
+};
+
+// Chart Colors Palette (Professional)
+const CHART_COLORS: [number, number, number][] = [
+    [239, 68, 68],    // Red
+    [249, 115, 22],   // Orange
+    [234, 179, 8],    // Yellow
+    [34, 197, 94],    // Green
+    [6, 182, 212],    // Cyan
+    [99, 102, 241],   // Indigo
+    [168, 85, 247],   // Purple
+    [236, 72, 153],   // Pink
+    [107, 114, 128],  // Gray
+    [20, 184, 166],   // Teal
+];
+
+// ============================================
 // PDF EXPORT - PROFESSIONAL DESIGN
 // ============================================
 
@@ -373,6 +522,161 @@ export const generatePDF = (data: ExportData): void => {
             },
         });
     }
+
+    // ===== NEW PAGE: PIE CHARTS & KPIs =====
+    doc.addPage();
+
+    // Page Header
+    doc.setFillColor(...colors.dark);
+    doc.rect(0, 0, pageWidth, 35, 'F');
+    doc.setFillColor(...colors.secondary);
+    doc.rect(0, 35, pageWidth, 3, 'F');
+
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(18);
+    doc.setFont('helvetica', 'bold');
+    doc.text('GORSEL ANALIZ', 14, 22);
+
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(180, 180, 180);
+    doc.text(`${turkishToAscii(periodLabel)} - Kategori Bazli Dagilim`, 14, 30);
+
+    let chartY = 55;
+
+    // ===== EXPENSE PIE CHART =====
+    const expenseTransactions = transactions.filter(t => t.type === 'expense');
+    const expenseByCategory: Record<string, number> = {};
+
+    expenseTransactions.forEach(t => {
+        const cat = turkishToAscii(CATEGORY_CONFIG[t.category as TransactionCategory]?.label || t.category);
+        expenseByCategory[cat] = (expenseByCategory[cat] || 0) + t.amount;
+    });
+
+    // Sort by value and create slices
+    const expenseSlices: PieSlice[] = Object.entries(expenseByCategory)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 8) // Max 8 categories
+        .map(([label, value], index) => ({
+            label,
+            value,
+            color: CHART_COLORS[index % CHART_COLORS.length],
+        }));
+
+    if (expenseSlices.length > 0) {
+        // Draw expense pie chart
+        const pieRadius = 35;
+        const pieCenterX = 55;
+        const pieCenterY = chartY + pieRadius + 15;
+
+        drawPieChart(doc, expenseSlices, pieCenterX, pieCenterY, pieRadius, 'GIDER DAGILIMI');
+
+        // Draw legend to the right
+        drawLegend(doc, expenseSlices, pieCenterX + pieRadius + 25, chartY + 10, currency);
+    }
+
+    // ===== INCOME PIE CHART =====
+    const incomeTransactions = transactions.filter(t => t.type === 'income');
+    if (incomeTransactions.length > 0) {
+        chartY += 110;
+
+        const incomeByCategory: Record<string, number> = {};
+        incomeTransactions.forEach(t => {
+            const cat = turkishToAscii(CATEGORY_CONFIG[t.category as TransactionCategory]?.label || t.category);
+            incomeByCategory[cat] = (incomeByCategory[cat] || 0) + t.amount;
+        });
+
+        const incomeSlices: PieSlice[] = Object.entries(incomeByCategory)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 8)
+            .map(([label, value], index) => ({
+                label,
+                value,
+                color: CHART_COLORS[(index + 3) % CHART_COLORS.length], // Offset colors
+            }));
+
+        const pieRadius = 35;
+        const pieCenterX = 55;
+        const pieCenterY = chartY + pieRadius + 15;
+
+        drawPieChart(doc, incomeSlices, pieCenterX, pieCenterY, pieRadius, 'GELIR DAGILIMI');
+        drawLegend(doc, incomeSlices, pieCenterX + pieRadius + 25, chartY + 10, currency);
+    }
+
+    // ===== KPI METRICS SECTION =====
+    let kpiY = 220;
+
+    doc.setTextColor(...colors.text);
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.text('PERFORMANS GOSTERGELERI', 14, kpiY);
+
+    kpiY += 12;
+
+    // KPI Cards Row
+    const kpiCardWidth = (pageWidth - 56) / 3;
+    const kpiCardHeight = 40;
+
+    // KPI 1: Average Transaction
+    const avgTransaction = transactions.length > 0
+        ? transactions.reduce((sum, t) => sum + t.amount, 0) / transactions.length
+        : 0;
+
+    doc.setFillColor(245, 245, 250);
+    doc.roundedRect(14, kpiY, kpiCardWidth, kpiCardHeight, 4, 4, 'F');
+    doc.setDrawColor(...colors.primary);
+    doc.setLineWidth(0.5);
+    doc.roundedRect(14, kpiY, kpiCardWidth, kpiCardHeight, 4, 4, 'S');
+
+    doc.setFontSize(8);
+    doc.setTextColor(100, 100, 100);
+    doc.setFont('helvetica', 'normal');
+    doc.text('Ortalama Islem', 14 + kpiCardWidth / 2, kpiY + 12, { align: 'center' });
+
+    doc.setFontSize(12);
+    doc.setTextColor(...colors.primary);
+    doc.setFont('helvetica', 'bold');
+    doc.text(formatAmount(avgTransaction, currency), 14 + kpiCardWidth / 2, kpiY + 28, { align: 'center' });
+
+    // KPI 2: Daily Average Expense
+    const uniqueDays = new Set(transactions.map(t => t.date)).size;
+    const dailyAvgExpense = uniqueDays > 0 ? totalExpense / uniqueDays : 0;
+
+    const kpi2X = 14 + kpiCardWidth + 14;
+    doc.setFillColor(254, 242, 242);
+    doc.roundedRect(kpi2X, kpiY, kpiCardWidth, kpiCardHeight, 4, 4, 'F');
+    doc.setDrawColor(...colors.expense);
+    doc.roundedRect(kpi2X, kpiY, kpiCardWidth, kpiCardHeight, 4, 4, 'S');
+
+    doc.setFontSize(8);
+    doc.setTextColor(100, 100, 100);
+    doc.setFont('helvetica', 'normal');
+    doc.text('Gunluk Ort. Gider', kpi2X + kpiCardWidth / 2, kpiY + 12, { align: 'center' });
+
+    doc.setFontSize(12);
+    doc.setTextColor(...colors.expense);
+    doc.setFont('helvetica', 'bold');
+    doc.text(formatAmount(dailyAvgExpense, currency), kpi2X + kpiCardWidth / 2, kpiY + 28, { align: 'center' });
+
+    // KPI 3: Savings Rate
+    const savingsRate = totalIncome > 0 ? ((totalIncome - totalExpense) / totalIncome) * 100 : 0;
+
+    const kpi3X = 14 + (kpiCardWidth + 14) * 2;
+    doc.setFillColor(240, 253, 244);
+    doc.roundedRect(kpi3X, kpiY, kpiCardWidth, kpiCardHeight, 4, 4, 'F');
+    doc.setDrawColor(...colors.income);
+    doc.roundedRect(kpi3X, kpiY, kpiCardWidth, kpiCardHeight, 4, 4, 'S');
+
+    doc.setFontSize(8);
+    doc.setTextColor(100, 100, 100);
+    doc.setFont('helvetica', 'normal');
+    doc.text('Tasarruf Orani', kpi3X + kpiCardWidth / 2, kpiY + 12, { align: 'center' });
+
+    doc.setFontSize(12);
+    const savingsColor = savingsRate >= 0 ? colors.income : colors.expense;
+    doc.setTextColor(savingsColor[0], savingsColor[1], savingsColor[2]);
+    doc.setFont('helvetica', 'bold');
+    doc.text(`%${savingsRate.toFixed(1)}`, kpi3X + kpiCardWidth / 2, kpiY + 28, { align: 'center' });
 
     // ===== FOOTER =====
     const pageCount = doc.getNumberOfPages();
