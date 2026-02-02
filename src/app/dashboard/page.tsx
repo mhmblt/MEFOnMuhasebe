@@ -583,6 +583,7 @@ function AddTransactionModal({
                                                    focus:outline-none focus:border-white/20 focus:bg-white/10
                                                    transition-all
                                                    [color-scheme:dark]"
+                                        {...register('date')}
                                     />
                                 </div>
 
