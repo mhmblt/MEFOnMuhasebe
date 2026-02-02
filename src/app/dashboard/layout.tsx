@@ -17,6 +17,7 @@ import Link from 'next/link';
 import {
     LayoutDashboard,
     PieChart,
+    Calendar,
     LogOut,
     Sparkles,
     ChevronLeft,
@@ -34,6 +35,7 @@ interface NavItem {
 const navItems: NavItem[] = [
     { icon: LayoutDashboard, label: 'Dashboard', href: '/dashboard' },
     { icon: PieChart, label: 'Raporlar', href: '/dashboard/reports' },
+    { icon: Calendar, label: 'Takvim', href: '/dashboard/calendar' },
 ];
 
 export default function DashboardLayout({
